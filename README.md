@@ -24,3 +24,31 @@ This module simplifies connecting to and querying Microsoft SQL Server databases
 
 * Node.js
 * mssql npm 套件 / mssql npm package
+
+===
+
+**操作範例 / Usage Examples:**
+
+**1. try...catch...finally 錯誤處理:**
+
+```javascript
+const { MSSQLConnection } = require('db.js'); // 將 'your-package-name' 改為實際的套件名稱
+const db = new MSSQLConnection('yourDatabase', {
+  server: 'yourServer',
+  user: 'yourUser',
+  password: 'yourPassword',
+});
+
+async function fetchData() {
+  try {
+    await db.open();
+    const result = await db.executeQuery('SELECT * FROM yourTable');
+    console.log(result.recordset);
+  } catch (error) {
+    console.error('Database error:', error);
+  } finally {
+    await db.close();
+  }
+}
+
+fetchData();
