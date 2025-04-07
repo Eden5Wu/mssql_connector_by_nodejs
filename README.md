@@ -32,7 +32,7 @@ This module simplifies connecting to and querying Microsoft SQL Server databases
 **1. try...catch...finally 錯誤處理:**
 
 ```javascript
-const { MSSQLConnection } = require('db.js'); // 將 'your-package-name' 改為實際的套件名稱
+const { MSSQLConnection } = require('db.js');
 const db = new MSSQLConnection('yourDatabase', {
   server: 'yourServer',
   user: 'yourUser',
