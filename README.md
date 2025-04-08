@@ -57,6 +57,7 @@ async function fetchData() {
 }
 
 fetchData();
+```
 
 
 ** 2. 簡單使用:**
@@ -78,6 +79,7 @@ async function fetchData(dbName) {
 }
 
 fetchData();
+```
 
 
 **3.使用交易(事務):**
@@ -102,6 +104,7 @@ async function fetchData(dbName) {
 }
 
 fetchData();
+```
 
 
 **4.分頁查詢:**
@@ -130,3 +133,4 @@ async function getPaginatedData() {
 }
 
 getPaginatedData();
+```
