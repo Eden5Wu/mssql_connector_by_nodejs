@@ -31,6 +31,21 @@ This module simplifies connecting to and querying Microsoft SQL Server databases
 * [mssql npm package](https://www.npmjs.com/package/mssql)
 * [dayjs npm package](https://www.npmjs.com/package/dayjs)
 
+
+**關於時間**
+
+MSSQL 的 **datetime/datetime2** 欄位預設是存放已經偏移時區的資料，所以回傳資料時在日期時間上會有兩種格式，且不再偏移時區
+
+* 日期時間時分秒都為 0 時：回傳 **YYYY-MM-DD** 格式
+* 日期時間時分秒都不為 0 時：回傳 **YYYY-MM-DDTHH:mm:dd.zzzZ**
+
+
+***例如：東八區的 MSSQL：***
+
+* 2025-01-01 >> "2025-01-01"
+* 2025-01-01 18:35:46 >> "2025-01-01T18:35:46+08:00"
+
+
 ===
 
 **操作範例 / Usage Examples:**
@@ -61,7 +76,7 @@ fetchData();
 ```
 
 
-** 2. 簡單使用:**
+**2. 簡單使用:**
 
 ```javascript
 const { MSSQLConnection } = require('db.js');
