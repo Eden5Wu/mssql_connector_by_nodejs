@@ -189,7 +189,7 @@ class MSSQLConnection {
         for (const key in row) {
           if (row[key] instanceof Date) {
             //row[key] = formatISOWithTimezone(row[key]);
-            row[key] = dayjs(row[key]).format('YYYY-MM-DDTHH:mm:ss.SSSZ');
+            row[key] = dayjs(row[key]).formatISOWithTimezone();
           }
           if (row[key] instanceof Buffer) {
             row[key] = row[key].toString('base64');
