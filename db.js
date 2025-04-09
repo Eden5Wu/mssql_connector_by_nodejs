@@ -209,4 +209,4 @@ class MSSQLConnection {
   }
 }
 
-module.exports = MSSQLConnection;
+module.exports = { MSSQLConnection };
