@@ -1,5 +1,5 @@
 const sqlConnector = require('mssql');
-const { formatISOWithTimezone } = require("./date_utils.js");
+const dayjs = require("./date_utils.js");
 
 class MSSQLConnection {
   constructor(dbName, config = {}) {
@@ -21,8 +21,6 @@ class MSSQLConnection {
     this.TYPES = sqlConnector.TYPES;
     this.dbPool = null;
     this.active = false;
-    this._dbName = dbName;
-    this.transaction = null;
   }
 
   get dbName() {
@@ -31,43 +29,41 @@ class MSSQLConnection {
 
   set dbName(newDbName) {
     if (this._dbName !== newDbName) {
-      if (this.active && this.dbPool) {
-        this.dbPool.close();
-        this.dbPool = null;
-        this.active = false;
-      }
+      dbPool.close();
+      this.dbPool = null;
+      this.active = false;
       this._dbName = newDbName;
       this.baseConfig.database = newDbName;
     }
-  }
+  }  
 
   async open() {
-    if (!this.active) {
-      try {
-        this.dbPool = await sqlConnector.connect(this.baseConfig);
-        this.active = true;
-        console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
-      } catch (err) {
-        console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
-        throw err;
+      if(!this.active){
+          try{
+              this.dbPool = await sqlConnector.connect(this.baseConfig);
+              this.active = true;
+              console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
+          }catch (err) {
+              console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
+              throw err;
+          }
       }
-    }
   }
 
-  async close() {
-    if (this.active && !this.transaction) {
-      try {
-        await this.dbPool.close();
-        this.dbPool = null;
-        this.active = false;
-        console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
-      } catch (err) {
-        console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
-        throw err;
+  async close(){
+      if(this.active && !this.transaction){
+          try{
+              await this.dbPool.close();
+              this.dbPool = null;
+              this.active = false;
+              console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
+          }catch(err){
+              console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
+              throw err;
+          }
+      } else if (this.transaction) {
+        console.warn('有事務正在進行中，請先 Commit 或 Rollback。');
       }
-    } else if (this.transaction) {
-      console.warn('有事務正在進行中，請先 Commit 或 Rollback。');
-    }
   }
 
   async startTransaction() {
@@ -110,15 +106,13 @@ class MSSQLConnection {
       console.warn('提供的事務與目前的事務不符，或沒有正在進行的事務。');
     }
   }
-
-  async executeQuery(query, parameters, requestOptions = {}) {
+    
+  async executeQuery(query, parameters) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
     try {
-      if (!this.active) {
-        await this.open();
-      }
-      const request = this.transaction ? new sqlConnector.Request(this.transaction) : this.dbPool.request();
-
-      await request.query(`USE ${this.dbName}`);
+        if(!this.active){
+            await this.open();
+        }
+      const request = this.dbPool.request();
 
       if (parameters) {
         for (const [name, type, value] of parameters) {
@@ -145,15 +139,8 @@ class MSSQLConnection {
     }
   }
 
-  async executeSQLCmd(sql, hostVariables, options = {}) {
+  async executeSQLCmd(sql, hostVariables, options = {}) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
     try {
-      if (!this.active) {
-        await this.open();
-      }
-      const request = this.transaction ? new sqlConnector.Request(this.transaction) : this.dbPool.request();
-
-      await request.query(`USE ${this.dbName}`);
-
       let paramIndex = 1;
       let modifiedSql = sql.replace(/\?/g, () => `@param${paramIndex++}`);
       const parameters = [];
@@ -196,12 +183,13 @@ class MSSQLConnection {
           modifiedSql += ` OFFSET ${skip || 0} ROWS FETCH NEXT ${limit} ROWS ONLY`;
       }
 
-      const result = await request.query(modifiedSql, parameters);
+      const result = await this.executeQuery(modifiedSql, parameters);
 
       result.recordset?.forEach((row) => {
         for (const key in row) {
           if (row[key] instanceof Date) {
-            row[key] = formatISOWithTimezone(row[key]);
+            //row[key] = formatISOWithTimezone(row[key]);
+            row[key] = dayjs(row[key]).format('YYYY-MM-DDTHH:mm:ss.SSSZ');
           }
           if (row[key] instanceof Buffer) {
             row[key] = row[key].toString('base64');
@@ -221,4 +209,4 @@ class MSSQLConnection {
   }
 }
 
-module.exports = { MSSQLConnection };
+module.exports = MSSQLConnection;
