@@ -29,6 +29,7 @@ This module simplifies connecting to and querying Microsoft SQL Server databases
 
 * Node.js
 * [mssql npm package](https://www.npmjs.com/package/mssql)
+* [dayjs npm package](https://www.npmjs.com/package/dayjs)
 
 ===
 
