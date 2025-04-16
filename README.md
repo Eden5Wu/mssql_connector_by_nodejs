@@ -1,3 +1,5 @@
+[中文版本 / Chinese Version](README_zh.md)
+
 # Node.js MSSQL Database Connector
 
 This module makes it super easy for your Node.js apps to connect to and play with Microsoft SQL Server databases. It handles all the behind-the-scenes stuff like keeping connections alive, making sure your data is safe from sneaky SQL injections, and even tidies up the data you get back so it's actually usable.
