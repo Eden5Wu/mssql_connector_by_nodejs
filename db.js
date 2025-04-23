@@ -16,6 +16,7 @@ class MSSQLConnection {
       options: {
         encrypt: config.options?.encrypt || false,
         trustServerCertificate: config.options?.trustServerCertificate || true,
+        useUTC: config.options?.useUTC || false,
       },
     };
     this.TYPES = sqlConnector.TYPES;
