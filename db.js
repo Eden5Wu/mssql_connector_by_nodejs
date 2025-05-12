@@ -30,7 +30,8 @@ class MSSQLConnection {
 
   set dbName(newDbName) {
     if (this._dbName !== newDbName) {
-      dbPool.close();
+      if (this.dbPool)
+        this.dbPool.close();
       this.dbPool = null;
       this.active = false;
       this._dbName = newDbName;
