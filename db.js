@@ -97,15 +97,24 @@ class MSSQLConnection {
   }
 
   async rollbackTransaction(transaction) {
-    if (transaction && this.transaction === transaction) {
+    const rollbackAndClear = async (tx) => {
       try {
-        await transaction.rollback();
-        console.log('事務已回滾。');
+        await tx.rollback();
+        console.log('Transaction rolled back.'); // 事務已回滾。
+      } catch (error) {
+        console.error('Error rolling back transaction:', error); // 回滾事務時發生錯誤：
+        // 在這裡可以添加其他的錯誤處理邏輯
       } finally {
         this.transaction = null;
       }
+    };
+
+    if (!transaction && this.transaction) {
+      await rollbackAndClear(this.transaction);
+    } else if (transaction && this.transaction === transaction) {
+      await rollbackAndClear(transaction);
     } else {
-      console.warn('提供的事務與目前的事務不符，或沒有正在進行的事務。');
+      console.warn('Provided transaction does not match current transaction, or no transaction is in progress.'); // 提供的事務與目前的事務不符，或沒有正在進行的事務。
     }
   }
     
