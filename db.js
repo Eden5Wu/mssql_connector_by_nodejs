@@ -84,15 +84,25 @@ class MSSQLConnection {
   }
 
   async commitTransaction(transaction) {
-    if (transaction && this.transaction === transaction) {
+    const commitAndClear = async (tx) => {
       try {
-        await transaction.commit();
-        console.log('事務已提交。');
+        await tx.commit();
+        console.log('Transaction committed.'); // 事務已提交。
+      } catch (error) {
+        console.error('Error committing transaction:', error); // 提交事務時發生錯誤：
+        // 在這裡可以添加其他的錯誤處理邏輯，例如重試或通知
+        throw error; // 重新拋出錯誤，以便調用者能夠處理
       } finally {
         this.transaction = null;
       }
+    };
+
+    if (!transaction && this.transaction) {
+      await commitAndClear(this.transaction);
+    } else if (transaction && this.transaction === transaction) {
+      await commitAndClear(transaction);
     } else {
-      console.warn('提供的事務與目前的事務不符，或沒有正在進行的事務。');
+      console.warn('Provided transaction does not match current transaction, or no transaction is in progress.'); // 提供的事務與目前的事務不符，或沒有正在進行的事務。
     }
   }
 
