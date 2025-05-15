@@ -1,4 +1,4 @@
-[中文版本 / Chinese Version](README_zh.md)
+[中文版本 / Chinese Version](README_ZH.md)
 
 # Node.js MSSQL Database Connector
 
