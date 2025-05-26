@@ -187,6 +187,17 @@ class MSSQLConnection {
               }
             } else if (value instanceof Date) {
               type = this.TYPES.DateTime;
+              const desiredLocalTime = dayjs(value);
+              const dateForSql = new Date(Date.UTC(
+                  desiredLocalTime.year(),
+                  desiredLocalTime.month(),
+                  desiredLocalTime.date(),
+                  desiredLocalTime.hour(),
+                  desiredLocalTime.minute(),
+                  desiredLocalTime.second(),
+                  desiredLocalTime.millisecond()
+              ));
+              value = dateForSql;
             } else if (value instanceof Buffer) {
               type = this.TYPES.VarBinary;
             } else if (typeof value === 'boolean') {
