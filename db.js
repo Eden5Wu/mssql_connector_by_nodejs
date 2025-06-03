@@ -21,7 +21,8 @@ class MSSQLConnection {
     };
     this.TYPES = sqlConnector.TYPES;
     this.dbPool = null;
-    this.active = false;
+    this._dbName = dbName;
+    this.transaction = null;
   }
 
   get dbName() {
@@ -33,39 +34,47 @@ class MSSQLConnection {
       if (this.dbPool)
         this.dbPool.close();
       this.dbPool = null;
-      this.active = false;
+                          
       this._dbName = newDbName;
       this.baseConfig.database = newDbName;
     }
   }  
 
+  get active() {
+    if (this.dbPool)
+      return this.dbPool.connected;
+    return false;
+  }
+
   async open() {
-      if(!this.active){
-          try{
-              this.dbPool = await sqlConnector.connect(this.baseConfig);
-              this.active = true;
-              console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
-          }catch (err) {
-              console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
-              throw err;
-          }
+    if (!this.dbPool || !this.dbPool.connected) {
+      try {
+        // 使用連線池， connect() 返回的是一個 pool
+        this.dbPool = await sqlConnector.connect(this.baseConfig);
+        await this.dbPool.connect();
+        console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
+      } catch (err) {
+          console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
+          throw err;
+           
       }
+    }
   }
 
   async close(){
-      if(this.active && !this.transaction){
-          try{
-              await this.dbPool.close();
-              this.dbPool = null;
-              this.active = false;
-              console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
-          }catch(err){
-              console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
-              throw err;
-          }
-      } else if (this.transaction) {
-        console.warn('有事務正在進行中，請先 Commit 或 Rollback。');
-      }
+    if (this.dbPool && this.dbPool.connected) {
+        try {
+            await this.dbPool.close();
+            this.dbPool = null;
+                                  
+            console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
+        } catch (err) {
+            console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
+            throw err;
+        }
+    }
+                                                                                 
+       
   }
 
   async startTransaction() {
@@ -130,9 +139,9 @@ class MSSQLConnection {
     
   async executeQuery(query, parameters) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
     try {
-        if(!this.active){
-            await this.open();
-        }
+                         
+      await this.open();
+         
       const request = this.dbPool.request();
 
       if (parameters) {
@@ -221,6 +230,7 @@ class MSSQLConnection {
         for (const key in row) {
           if (row[key] instanceof Date) {
             //row[key] = formatISOWithTimezone(row[key]);
+            //row[key] = dayjs(row[key]).format();
             row[key] = dayjs(row[key]).formatISOWithTimezone();
           }
           if (row[key] instanceof Buffer) {
