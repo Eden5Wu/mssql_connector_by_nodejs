@@ -34,7 +34,6 @@ class MSSQLConnection {
       if (this.dbPool)
         this.dbPool.close();
       this.dbPool = null;
-                          
       this._dbName = newDbName;
       this.baseConfig.database = newDbName;
     }
@@ -56,7 +55,6 @@ class MSSQLConnection {
       } catch (err) {
           console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
           throw err;
-           
       }
     }
   }
@@ -66,15 +64,12 @@ class MSSQLConnection {
         try {
             await this.dbPool.close();
             this.dbPool = null;
-                                  
             console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
         } catch (err) {
             console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
             throw err;
         }
     }
-                                                                                 
-       
   }
 
   async startTransaction() {
@@ -139,9 +134,7 @@ class MSSQLConnection {
     
   async executeQuery(query, parameters) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
     try {
-                         
       await this.open();
-         
       const request = this.dbPool.request();
 
       if (parameters) {
@@ -196,17 +189,6 @@ class MSSQLConnection {
               }
             } else if (value instanceof Date) {
               type = this.TYPES.DateTime;
-              const desiredLocalTime = dayjs(value);
-              const dateForSql = new Date(Date.UTC(
-                  desiredLocalTime.year(),
-                  desiredLocalTime.month(),
-                  desiredLocalTime.date(),
-                  desiredLocalTime.hour(),
-                  desiredLocalTime.minute(),
-                  desiredLocalTime.second(),
-                  desiredLocalTime.millisecond()
-              ));
-              value = dateForSql;
             } else if (value instanceof Buffer) {
               type = this.TYPES.VarBinary;
             } else if (typeof value === 'boolean') {
