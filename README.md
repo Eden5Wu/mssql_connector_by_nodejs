@@ -44,6 +44,59 @@ MSSQL's `datetime` and `datetime2` fields usually store time zone-aware data. So
 
 In the `baseConfig`, you can set default values for things like `server`, `database`, `user`, `password`, and `pool` if you always connect to the same place. If you prefer to set these up every time you make a connection, this module gives you that option when you create a new instance.
 
+
+**Common Issues & Solutions:**
+
+* **"Connection not yet open" Error:**
+This error typically pops up when you try to run a query, but the underlying MSSQL connection hasn't been successfully established or has already closed.
+When you're not using connection pooling, the MSSQLConnection instance's lifecycle is tightly tied to its underlying connection. If you create multiple independent instances within a single function, you must explicitly call the close() method on each instance after you're done with your operations. Failing to do so can lead to resource leaks or issues with subsequent operations.
+
+```javascript
+// isValid not closed will trigger "Connection not yet open" error
+async function isValid() {
+  const db = new MSSQLConnection('yourDatabase', {
+    server: 'yourServer',
+    user: 'yourUser',
+    password: 'yourPassword',
+  });
+
+  try {
+    await db.open(); // Ensure connection is open
+
+    // Execute multiple query operations, all of which will use this single 'db' connection instance
+    const result1 = await db.executeSQLCmd('SELECT * FROM Users WHERE id = ?', [1]);
+    console.log('Query 1 Result:', result1.results);
+
+  } catch (error) {
+    console.error('Error in isValid:', error);
+  } finally {
+    // Regardless of success or failure, ensure the connection is closed
+    // db.close(); // BUG: If closed here, subsequent multiInstance db1 operations will error
+    console.log('Database connection in isValid function has been closed.');
+  }
+}
+
+function multiInstance() {
+  const db1 = new MSSQLConnection('yourDatabase', { server: 'yourServer', user: 'yourUser', password: 'yourPassword' });
+
+  try {
+    await db1.open();
+    const res1 = await db1.executeSQLCmd('SELECT GETDATE() AS CurrentDate');
+    console.log('db1 Current Date:', res1.results[0].CurrentDate);
+  } catch (error) {
+    console.error('Error in multiInstanceBadExample:', error);
+  } finally {
+    // Handle closing of multiple instances here, ensuring each instance is closed
+    if (db1.active) {
+        await db1.close().catch(err => console.error('Failed to close db1:', err));
+    }
+  }
+}
+```
+
+**"Connection is closed" Error:**
+This error typically happens when you try to perform multiple queries within a single function without using a transaction. Transactions bind multiple database operations to the same connection, helping you avoid issues caused by connections being unexpectedly closed. For details, check out Example 3: Using Transactions.
+
 ---
 
 **Usage Examples:**
@@ -96,18 +149,21 @@ fetchData();
 
 3. Using Transactions:
 ```javascript
-const { MSSQLConnection } = require('db.js'); // Check your path!
+const { MSSQLConnection } = require('db.js');
 
 async function fetchData(dbName) {
   const db = new MSSQLConnection('yourDatabase');
-  const theTrans = await db.startTransaction();
+  const theTrans = await db.startTransaction()
   try {
     await db.open();
     const result = await db.executeQuery('SELECT * FROM yourTable');
     console.log(result.recordset);
-    await db.commitTransaction(theTrans);
+
+    const result2 = await db.executeQuery('SELECT * FROM yourTable2');
+    console.log(result2.recordset);
+    await db.commitTransaction(theTrans)
   } catch (error) {
-    await sqlConn.rollbackTransaction(trans);
+    await db.rollbackTransaction(trans);
     console.error('Database error:', error);
   } finally {
     await db.close();
