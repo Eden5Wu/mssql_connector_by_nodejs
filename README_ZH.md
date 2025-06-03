@@ -47,8 +47,59 @@ MSSQL 的 **datetime/datetime2** 欄位預設是存放已經偏移時區的資�
 
 **關於預設值的修改**
 
-**baseConfig** 內的空字串，如 *server*、*database*、*user*、*password*、*pool* 等，可以視你的環境給予預設值，如果你喜歡每次建立連線都需要配置，本套件也提供建立實例時調整的選項。
+`baseConfig` 內部包含了如 `server`, `database`, `user`, `password` 等連接參數的預設空字串。您可以根據您的環境需求，在初始化 `MSSQLConnection` 實例時提供這些配置，或者在程式碼中修改 `baseConfig` 的預設值，以適應您的開發或生產環境。本套件設計彈性，允許您在每次建立實例時進行個性化配置。
 
+
+### 常見問題與處理 / Common Issues & Solutions:
+
+* **"Connection not yet open" 錯誤：**
+此錯誤通常發生於嘗試執行查詢時，底層的 MSSQL 連接尚未成功建立或已經關閉。
+當未使用連接池設定時，`MSSQLConnection` 實例的生命週期與其底層的連接緊密相關。若是單一 function 內，有多個實例時，每個實例做完操作後，必須做 close。
+
+```
+// isValid 未關閉會觸發 "Connection not yet open" 錯誤
+async function isValid() {
+  const db = new MSSQLConnection('yourDatabase', {
+    server: 'yourServer',
+    user: 'yourUser',
+    password: 'yourPassword',
+  });
+
+  try {
+    await db.open(); // 確保連線已開啟
+
+    // 執行多個查詢操作，這些操作都將使用 'db' 這個單一連線實例
+    const result1 = await db.executeSQLCmd('SELECT * FROM Users WHERE id = ?', [1]);
+    console.log('Query 1 Result:', result1.results);
+
+  } catch (error) {
+    console.error('isValid 發生錯誤:', error);
+  } finally {
+    // 無論成功或失敗，都應確保關閉連線
+    // db.close(); // BUG: 如果在這裡關閉，後續的 multiInstance db1 操作會報錯
+    console.log('isValid 函數中的資料庫連線已關閉。');
+  }
+}
+
+function multiInstance() {
+  const db1 = new MSSQLConnection('yourDatabase', { server: 'yourServer', user: 'yourUser', password: 'yourPassword' });
+
+  try {
+    await db1.open();
+    const res1 = await db1.executeSQLCmd('SELECT GETDATE() AS CurrentDate');
+    console.log('db1 Current Date:', res1.results[0].CurrentDate);
+  } catch (error) {
+    console.error('multiInstanceBadExample 發生錯誤:', error);
+  } finally {
+    // 在這裡處理多個實例的關閉，確保每個實例都被關閉
+    if (db1.active) {
+        await db1.close().catch(err => console.error('關閉 db1 失敗:', err));
+    }
+  }
+}
+```
+
+* **"Connection is closed" 錯誤：** 此錯誤通常發生於，單一 function 中多次執行查詢時。使用交易即可排除此問題。細節請參閱範例 `3.使用交易(事務)`
 
 ===
 
@@ -88,7 +139,6 @@ const { MSSQLConnection } = require('db.js');
 async function fetchData(dbName) {
   const db = new MSSQLConnection('yourDatabase');
   try {
-    await db.open();
     const result = await db.executeQuery('SELECT * FROM yourTable');
     console.log(result.recordset);
   } catch (error) {
@@ -114,9 +164,12 @@ async function fetchData(dbName) {
     await db.open();
     const result = await db.executeQuery('SELECT * FROM yourTable');
     console.log(result.recordset);
+
+    const result2 = await db.executeQuery('SELECT * FROM yourTable2');
+    console.log(result2.recordset);
     await db.commitTransaction(theTrans)
   } catch (error) {
-    await sqlConn.rollbackTransaction(trans);
+    await db.rollbackTransaction(trans);
     console.error('Database error:', error);
   } finally {
     await db.close();
