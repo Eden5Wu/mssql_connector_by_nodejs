@@ -21,7 +21,8 @@ class MSSQLConnection {
     };
     this.TYPES = sqlConnector.TYPES;
     this.dbPool = null;
-    this.active = false;
+    this._dbName = dbName;
+    this.transaction = null;
   }
 
   get dbName() {
@@ -30,41 +31,45 @@ class MSSQLConnection {
 
   set dbName(newDbName) {
     if (this._dbName !== newDbName) {
-      dbPool.close();
+      if (this.dbPool)
+        this.dbPool.close();
       this.dbPool = null;
-      this.active = false;
       this._dbName = newDbName;
       this.baseConfig.database = newDbName;
     }
   }  
 
+  get active() {
+    if (this.dbPool)
+      return this.dbPool.connected;
+    return false;
+  }
+
   async open() {
-      if(!this.active){
-          try{
-              this.dbPool = await sqlConnector.connect(this.baseConfig);
-              this.active = true;
-              console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
-          }catch (err) {
-              console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
-              throw err;
-          }
+    if (!this.dbPool || !this.dbPool.connected) {
+      try {
+        // 使用連線池， connect() 返回的是一個 pool
+        this.dbPool = await sqlConnector.connect(this.baseConfig);
+        await this.dbPool.connect();
+        console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
+      } catch (err) {
+          console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
+          throw err;
       }
+    }
   }
 
   async close(){
-      if(this.active && !this.transaction){
-          try{
-              await this.dbPool.close();
-              this.dbPool = null;
-              this.active = false;
-              console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
-          }catch(err){
-              console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
-              throw err;
-          }
-      } else if (this.transaction) {
-        console.warn('有事務正在進行中，請先 Commit 或 Rollback。');
-      }
+    if (this.dbPool && this.dbPool.connected) {
+        try {
+            await this.dbPool.close();
+            this.dbPool = null;
+            console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
+        } catch (err) {
+            console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
+            throw err;
+        }
+    }
   }
 
   async startTransaction() {
@@ -83,36 +88,53 @@ class MSSQLConnection {
   }
 
   async commitTransaction(transaction) {
-    if (transaction && this.transaction === transaction) {
+    const commitAndClear = async (tx) => {
       try {
-        await transaction.commit();
-        console.log('事務已提交。');
+        await tx.commit();
+        console.log('Transaction committed.'); // 事務已提交。
+      } catch (error) {
+        console.error('Error committing transaction:', error); // 提交事務時發生錯誤：
+        // 在這裡可以添加其他的錯誤處理邏輯，例如重試或通知
+        throw error; // 重新拋出錯誤，以便調用者能夠處理
       } finally {
         this.transaction = null;
       }
+    };
+
+    if (!transaction && this.transaction) {
+      await commitAndClear(this.transaction);
+    } else if (transaction && this.transaction === transaction) {
+      await commitAndClear(transaction);
     } else {
-      console.warn('提供的事務與目前的事務不符，或沒有正在進行的事務。');
+      console.warn('Provided transaction does not match current transaction, or no transaction is in progress.'); // 提供的事務與目前的事務不符，或沒有正在進行的事務。
     }
   }
 
   async rollbackTransaction(transaction) {
-    if (transaction && this.transaction === transaction) {
+    const rollbackAndClear = async (tx) => {
       try {
-        await transaction.rollback();
-        console.log('事務已回滾。');
+        await tx.rollback();
+        console.log('Transaction rolled back.'); // 事務已回滾。
+      } catch (error) {
+        console.error('Error rolling back transaction:', error); // 回滾事務時發生錯誤：
+        // 在這裡可以添加其他的錯誤處理邏輯
       } finally {
         this.transaction = null;
       }
+    };
+
+    if (!transaction && this.transaction) {
+      await rollbackAndClear(this.transaction);
+    } else if (transaction && this.transaction === transaction) {
+      await rollbackAndClear(transaction);
     } else {
-      console.warn('提供的事務與目前的事務不符，或沒有正在進行的事務。');
+      console.warn('Provided transaction does not match current transaction, or no transaction is in progress.'); // 提供的事務與目前的事務不符，或沒有正在進行的事務。
     }
   }
     
   async executeQuery(query, parameters) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
     try {
-        if(!this.active){
-            await this.open();
-        }
+      await this.open();
       const request = this.dbPool.request();
 
       if (parameters) {
@@ -167,17 +189,6 @@ class MSSQLConnection {
               }
             } else if (value instanceof Date) {
               type = this.TYPES.DateTime;
-              const desiredLocalTime = dayjs(value);
-              const dateForSql = new Date(Date.UTC(
-                  desiredLocalTime.year(),
-                  desiredLocalTime.month(),
-                  desiredLocalTime.date(),
-                  desiredLocalTime.hour(),
-                  desiredLocalTime.minute(),
-                  desiredLocalTime.second(),
-                  desiredLocalTime.millisecond()
-              ));
-              value = dateForSql;
             } else if (value instanceof Buffer) {
               type = this.TYPES.VarBinary;
             } else if (typeof value === 'boolean') {
