@@ -48,16 +48,15 @@ class MSSQLConnection {
   async open() {
     if (!this.dbPool || !this.dbPool.connected) {
       try {
-        // 使用連線池， connect() 返回的是一個 pool
-        this.dbPool = await sqlConnector.connect(this.baseConfig);
-        await this.dbPool.connect();
+        this.dbPool = await new sqlConnector.ConnectionPool(this.baseConfig).connect();
         console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
       } catch (err) {
-          console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
-          throw err;
+        console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
+        throw err;
       }
     }
   }
+
 
   async close(){
     if (this.dbPool && this.dbPool.connected) {
@@ -133,9 +132,14 @@ class MSSQLConnection {
   }
     
   async executeQuery(query, parameters) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
+    if (!this.transaction) {
+      await this.open(); // 只有非交易時，才呼叫 open()
+    }
+
     try {
-      await this.open();
-      const request = this.dbPool.request();
+      const request = this.transaction
+        ? new sqlConnector.Request(this.transaction)
+        : this.dbPool.request();
 
       if (parameters) {
         for (const [name, type, value] of parameters) {
@@ -157,7 +161,11 @@ class MSSQLConnection {
 
       return result;
     } catch (err) {
-      console.error('SQL Error', err);
+      console.error('SQL Error', {
+        query,
+        parameters,
+        error: err
+      });
       throw err;
     }
   }
