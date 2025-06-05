@@ -14,9 +14,9 @@ class MSSQLConnection {
         idleTimeoutMillis: config.pool?.idleTimeoutMillis || 30000,
       },
       options: {
-        encrypt: config.options?.encrypt || false,
-        trustServerCertificate: config.options?.trustServerCertificate || true,
-        useUTC: config.options?.useUTC || false,
+        encrypt: config.options?.encrypt ?? false,
+        trustServerCertificate: config.options?.trustServerCertificate ?? true,
+        useUTC: config.options?.useUTC ?? false,
       },
     };
     this.TYPES = sqlConnector.TYPES;
@@ -221,7 +221,10 @@ class MSSQLConnection {
           if (row[key] instanceof Date) {
             //row[key] = formatISOWithTimezone(row[key]);
             //row[key] = dayjs(row[key]).format();
-            row[key] = dayjs(row[key]).formatISOWithTimezone();
+            if (this.options?.useUTC)
+              row[key] = dayjs(row[key]).formatISOWithTimezoneFromUTC();
+            else
+              row[key] = dayjs(row[key]).formatISOWithTimezone();
           }
           if (row[key] instanceof Buffer) {
             row[key] = row[key].toString('base64');
