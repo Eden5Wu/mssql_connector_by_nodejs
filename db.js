@@ -19,6 +19,7 @@ class MSSQLConnection {
         useUTC: config.options?.useUTC ?? false,
       },
     };
+    this.options = config.options || {};
     this.TYPES = sqlConnector.TYPES;
     this.dbPool = null;
     this._dbName = dbName;
