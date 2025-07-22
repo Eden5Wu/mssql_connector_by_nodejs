@@ -6,7 +6,7 @@
  * @param {boolean} useUTC - 指示如何解讀日期時間的值。
  * @returns {string} 格式化後的日期字串。
  */
-function formatDate(date, useUTC = false) {
+function formatDateToCustomISO(date, useUTC = false) {
   // 確保傳入的是有效的 Date 物件，否則直接回傳原始值
   if (!(date instanceof Date) || isNaN(date.getTime())) {
     return date;
@@ -46,4 +46,4 @@ function formatDate(date, useUTC = false) {
 }
 
 // 匯出唯一的函式
-module.exports = { formatDate };
+module.exports = { formatDateToCustomISO };
