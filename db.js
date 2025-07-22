@@ -183,85 +183,70 @@ class MSSQLConnection {
   }
 
   async executeSQLCmd(sql, hostVariables, options = {}) {
+    if (!this.transaction && !this.connected) {
+      await this.open();
+    }
+
     try {
-      let paramIndex = 1;
-      let modifiedSql = sql.replace(/\?/g, () => `@param${paramIndex++}`);
-      const parameters = [];
+      const request = this.transaction
+        ? new sqlConnector.Request(this.transaction)
+        : this.dbPool.request();
 
-      const hasParameters = sql.includes('?');
-
-      if (hostVariables && hasParameters && Array.isArray(hostVariables)) {
-        for (let i = 0; i < hostVariables.length; i++) {
-          const param = hostVariables[i];
-          let value, type;
-
-          if (Array.isArray(param) && param.length === 2) {
-            value = param[0];
-            type = param[1];
-          } else {
-            value = param;
-            type = this.TYPES.NVarChar;
-            if (typeof value === 'number') {
-              if (Number.isInteger(value)) {
-                type = this.TYPES.Int;
-              } else {
-                type = this.TYPES.Float;
-              }
-            } else if (value instanceof Date) {
-              type = this.TYPES.DateTime;
-            } else if (value instanceof Buffer) {
-              type = this.TYPES.VarBinary;
-            } else if (typeof value === 'boolean') {
-              type = this.TYPES.Bit;
-            }
-          }
-          parameters.push([`param${i + 1}`, type, value]);
-        }
-      }
-
+      // 使用 #prepareSqlRequest 處理參數綁定
+      let processedSql = this.#prepareSqlRequest(sql, hostVariables, request);
+      
+      // executeSQLCmd 獨有的 OFFSET 分頁邏輯
       const { limit, skip } = options;
       if (limit !== undefined && limit !== -1) {
-        const hasOrderBy = /\bORDER BY\b/i.test(sql);
+        const hasOrderBy = /\bORDER BY\b/i.test(processedSql); // 注意這裡要用 processedSql
         if (hasOrderBy)
-          modifiedSql += ` OFFSET ${skip || 0} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+          processedSql += ` OFFSET ${skip || 0} ROWS FETCH NEXT ${limit} ROWS ONLY`;
       }
 
-      const result = await this.executeQuery(modifiedSql, parameters);
+      const result = await request.query(processedSql);
 
       // 由 normalizeRow 取代重複內容
       if (result && result.recordset) 
         result.recordset = result.recordset.map(this.#normalizeRow);
       
-
-      // 取消自定義內容, 符合多數人使用 mssql 的習慣
-      // return {
-      //   results: result.recordset,
-      //   n: result.rowsAffected[result.rowsAffected.length - 1],
-      //   responseTime: result.statistics?.elapsedMilliseconds || 0,
-      //   warn: [],
-      // };
       return result;
     } catch (err) {
+      console.error('SQL Error in executeSQLCmd', { // 增加錯誤來源識別
+        query: sql, // 顯示原始查詢
+        parameters: hostVariables,
+        error: err
+      });
       throw err;
     }
   }
 
-  async executeMultiResult(sql, params = {}) {
-    if (!this.connected) await this.open();
-
-    const request = this.transaction
-      ? this.transaction.request()
-      : this.dbPool.request();
-
-    for (const key in params) {
-      request.input(key, params[key]);
+  async executeMultiResult(sql, hostVariables) { // 參數改為 hostVariables 陣列
+    if (!this.transaction && !this.connected) { // 考慮到事務，如果沒有事務則開啟連線
+      await this.open();
     }
 
-    const result = await request.query(sql);
+    try {
+      const request = this.transaction
+        ? new sqlConnector.Request(this.transaction) // 使用 Transaction.request()
+        : this.dbPool.request();
 
-    return Array.isArray(result.recordsets)
-      ? result.recordsets.map(rs => rs.map(this.#normalizeRow))
-      : []
+      // 使用 #prepareSqlRequest 處理參數綁定
+      const processedSql = this.#prepareSqlRequest(sql, hostVariables, request);
+
+      const result = await request.query(processedSql);
+
+      // 對每個 recordset 中的行進行正規化
+      return Array.isArray(result.recordsets)
+        ? result.recordsets.map(rs => rs.map(this.#normalizeRow))
+        : [];
+    } catch (err) {
+      console.error('SQL Error in executeMultiResult', { // 增加錯誤來源識別
+        query: sql, // 顯示原始查詢
+        parameters: hostVariables,
+        error: err
+      });
+      throw err;
+    }
   }
 
   #normalizeRow = (row) => {
@@ -275,5 +260,46 @@ class MSSQLConnection {
     }
     return row;
   };
+
+  // 私有輔助函式：處理 SQL 參數綁定和型別推斷
+  #prepareSqlRequest(sql, hostVariables, request) {
+    let paramIndex = 1;
+    let modifiedSql = sql.replace(/\?/g, () => `@param${paramIndex++}`);
+    
+    // 檢查是否有問號，如果沒有就跳過 hostVariables 處理
+    const hasPositionalParams = sql.includes('?');
+
+    if (hostVariables && Array.isArray(hostVariables) && hasPositionalParams) {
+      for (let i = 0; i < hostVariables.length; i++) {
+        const param = hostVariables[i];
+        let value, type;
+
+        if (Array.isArray(param) && param.length === 2) {
+          value = param[0];
+          type = param[1];
+        } else {
+          value = param;
+          // 自動推斷型別的邏輯
+          type = this.TYPES.NVarChar; // 預設為NVarChar
+          if (typeof value === 'number') {
+            if (Number.isInteger(value)) {
+              type = this.TYPES.Int;
+            } else {
+              type = this.TYPES.Float;
+            }
+          } else if (value instanceof Date) {
+            type = this.TYPES.DateTime;
+          } else if (value instanceof Buffer) {
+            type = this.TYPES.VarBinary;
+          } else if (typeof value === 'boolean') {
+            type = this.TYPES.Bit;
+          }
+        }
+        // 將參數加入 request 物件
+        request.input(`param${i + 1}`, type, value);
+      }
+    }
+    return modifiedSql; // 返回修改後的 SQL 語句
+  }
 }
 module.exports = { MSSQLConnection };
