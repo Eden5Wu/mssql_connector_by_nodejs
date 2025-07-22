@@ -29,7 +29,6 @@ This module simplifies connecting to and querying Microsoft SQL Server databases
 
 * Node.js
 * [mssql npm package](https://www.npmjs.com/package/mssql)
-* [dayjs npm package](https://www.npmjs.com/package/dayjs)
 
 
 **關於時間**
@@ -44,6 +43,14 @@ MSSQL 的 **datetime/datetime2** 欄位預設是存放已經偏移時區的資�
 
 * 2025-01-01 >> "2025-01-01"
 * 2025-01-01 18:35:46 >> "2025-01-01T18:35:46+08:00"
+
+***如何選擇 `useUTC` 的設定，是取決於您應用程式目標的關鍵決定：***
+
+    *情況一：與既有系統共存 (應設為 `false`)
+    若您的目標是與一個既有的、只在特定時區（例如 `UTC+8`）運作的系統（如 `Win32` 應用）及其資料庫共存，您應該將 `useUTC` 設定為 `false`。這能確保在讀取大量歷史資料時，時間不會被錯誤地偏移，以維持與舊系統的資料一致性。
+
+    *情況二：開發新的全球化應用 (應設為 `true`)
+    若您正在開發一個新的、需要面向全球使用者的應用程式，那麼最佳實踐是將 `useUTC` 設定為 `true`（這也是 `mssql` 套件的預設值）。這會將所有時間以世界標準時間 (`UTC`) 來處理，從而消除時區混淆，是處理跨國應用的最穩健作法。
 
 **關於預設值的修改**
 
