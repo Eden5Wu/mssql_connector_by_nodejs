@@ -39,74 +39,76 @@ MSSQL's `datetime` and `datetime2` fields usually store time zone-aware data. So
 * `2025-01-01` becomes `"2025-01-01"`
 * `2025-01-01 18:35:46` becomes `"2025-01-01T18:35:46+08:00"`
 
-**How to configure the useUTC setting is a critical decision that depends on your application's goals:**
+**How to configure the `useUTC` setting is a critical decision that depends on your application's goals:**
 
-  * **Scenario 1: Co-existing with a Legacy System (Should be set to false)**
-    
-    If your objective is to co-exist with a legacy system (e.g., a Win32 application) and its database that operate in a specific timezone (such as UTC+8), you should set useUTC to false. This ensures that when reading historical data, timestamps are not incorrectly offset, thus maintaining data consistency with the old system.
+* **Scenario 1: Co-existing with a Legacy System (Should be set to `false`)**
 
-  * **Scenario 2: Developing a New, Global Application (Should be set to true)**
-    
-    If you are developing a new application intended for a global audience, the best practice is to set useUTC to true (which is also the default for the mssql package). This will handle all timestamps as Coordinated Universal Time (UTC), eliminating timezone ambiguity and providing a robust approach for handling international applications.
+    If your objective is to co-exist with a legacy system (e.g., a Win32 application) and its database that operate in a specific timezone (such as UTC+8), you should set `useUTC` to `false`. This ensures that when reading historical data, timestamps are not incorrectly offset, thus maintaining data consistency with the old system.
+
+* **Scenario 2: Developing a New, Global Application (Should be set to `true`)**
+
+    If you are developing a new application intended for a global audience, the best practice is to set `useUTC` to `true` (which is also the default for the mssql package). This will handle all timestamps as Coordinated Universal Time (UTC), eliminating timezone ambiguity and providing a robust approach for handling international applications.
 
 ---
 
-**Tweaking the Defaults**
+**Configuring Connection Parameters**
 
-In the `baseConfig`, you can set default values for things like `server`, `database`, `user`, `password`, and `pool` if you always connect to the same place. If you prefer to set these up every time you make a connection, this module gives you that option when you create a new instance.
+The `MSSQLConnection` class constructor accepts a `config` object where you can specify connection parameters such as `server`, `database`, `user`, `password`, `pool` settings, and `options`. These parameters are stored internally in the instance's `params` property. If you omit any of these properties in the `config` object, the module will use default values (e.g., empty strings for `server`, `database`, `user`, `password`, or predefined values for `pool` and `options`). Additionally, you can use the provided builder methods (e.g., `withServer()`, `withDatabase()`) to configure these parameters after creating an `MSSQLConnection` instance, offering flexibility for different connection scenarios.
 
+---
 
 **Common Issues & Solutions:**
 
 * **"Connection not yet open" Error:**
-This error typically pops up when you try to run a query, but the underlying MSSQL connection hasn't been successfully established or has already closed.
-When you're not using connection pooling, the MSSQLConnection instance's lifecycle is tightly tied to its underlying connection. If you create multiple independent instances within a single function, you must explicitly call the close() method on each instance after you're done with your operations. Failing to do so can lead to resource leaks or issues with subsequent operations.
+    This error typically pops up when you try to run a query, but the underlying MSSQL connection hasn't been successfully established or has already closed.
+    When you're not using connection pooling, the `MSSQLConnection` instance's lifecycle is tightly tied to its underlying connection. If you create multiple independent instances within a single function, you must explicitly call the `close()` method on each instance after you're done with your operations. Failing to do so can lead to resource leaks or issues with subsequent operations.
 
-```javascript
-// isValid not closed will trigger "Connection not yet open" error
-async function isValid() {
-  const db = new MSSQLConnection('yourDatabase', {
-    server: 'yourServer',
-    user: 'yourUser',
-    password: 'yourPassword',
-  });
+    ```javascript
+    // isValid not closed will trigger "Connection not yet open" error
+    async function isValid() {
+      const db = new MSSQLConnection({
+        server: 'yourServer',
+        database: 'yourDatabase',
+        user: 'yourUser',
+        password: 'yourPassword',
+      });
 
-  try {
-    await db.open(); // Ensure connection is open
+      try {
+        await db.open(); // Ensure connection is open
 
-    // Execute multiple query operations, all of which will use this single 'db' connection instance
-    const result1 = await db.executeSQLCmd('SELECT * FROM Users WHERE id = ?', [1]);
-    console.log('Query 1 Result:', result1.results);
+        // Execute multiple query operations, all of which will use this single 'db' connection instance
+        const result1 = await db.executeSQLCmd('SELECT * FROM Users WHERE id = ?', [1]);
+        console.log('Query 1 Result:', result1.results);
 
-  } catch (error) {
-    console.error('Error in isValid:', error);
-  } finally {
-    // Regardless of success or failure, ensure the connection is closed
-    // db.close(); // BUG: If closed here, subsequent multiInstance db1 operations will error
-    console.log('Database connection in isValid function has been closed.');
-  }
-}
-
-function multiInstance() {
-  const db1 = new MSSQLConnection('yourDatabase', { server: 'yourServer', user: 'yourUser', password: 'yourPassword' });
-
-  try {
-    await db1.open();
-    const res1 = await db1.executeSQLCmd('SELECT GETDATE() AS CurrentDate');
-    console.log('db1 Current Date:', res1.results[0].CurrentDate);
-  } catch (error) {
-    console.error('Error in multiInstanceBadExample:', error);
-  } finally {
-    // Handle closing of multiple instances here, ensuring each instance is closed
-    if (db1.active) {
-        await db1.close().catch(err => console.error('Failed to close db1:', err));
+      } catch (error) {
+        console.error('Error in isValid:', error);
+      } finally {
+        // Regardless of success or failure, ensure the connection is closed
+        // db.close(); // BUG: If closed here, subsequent multiInstance db1 operations will error
+        console.log('Database connection in isValid function has been closed.');
+      }
     }
-  }
-}
-```
 
-**"Connection is closed" Error:**
-This error typically happens when you try to perform multiple queries within a single function without using a transaction. Transactions bind multiple database operations to the same connection, helping you avoid issues caused by connections being unexpectedly closed. For details, check out Example 3: Using Transactions.
+    function multiInstance() {
+      const db1 = new MSSQLConnection({ server: 'yourServer', database: 'yourDatabase', user: 'yourUser', password: 'yourPassword' });
+
+      try {
+        await db1.open();
+        const res1 = await db1.executeSQLCmd('SELECT GETDATE() AS CurrentDate');
+        console.log('db1 Current Date:', res1.results[0].CurrentDate);
+      } catch (error) {
+        console.error('Error in multiInstanceBadExample:', error);
+      } finally {
+        // Handle closing of multiple instances here, ensuring each instance is closed
+        if (db1.active) {
+            await db1.close().catch(err => console.error('Failed to close db1:', err));
+        }
+      }
+    }
+    ```
+
+* **"Connection is closed" Error:**
+    This error typically happens when you try to perform multiple queries within a single function without using a transaction. Transactions bind multiple database operations to the same connection, helping you avoid issues caused by connections being unexpectedly closed. For details, check out Example 3: Using Transactions.
 
 ---
 
@@ -115,9 +117,10 @@ This error typically happens when you try to perform multiple queries within a s
 **1. Error Handling with `try...catch...finally`:**
 
 ```javascript
-const { MSSQLConnection } = require('db.js'); // Make sure the path is right!
-const db = new MSSQLConnection('yourDatabase', {
+const { MSSQLConnection } = require('./db.js'); // Make sure the path is right!
+const db = new MSSQLConnection({
   server: 'yourServer',
+  database: 'yourDatabase',
   user: 'yourUser',
   password: 'yourPassword',
 });
@@ -137,13 +140,18 @@ async function fetchData() {
 fetchData();
 ```
 
-2. Simple Usage:
+**2. Simple Usage:**
 
 ```javascript
-const { MSSQLConnection } = require('db.js'); // Adjust the path if needed
+const { MSSQLConnection } = require('./db.js'); // Adjust the path if needed
 
-async function fetchData(dbName) {
-  const db = new MSSQLConnection('yourDatabase');
+async function fetchData() {
+  const db = new MSSQLConnection({
+    database: 'yourDatabase',
+    server: 'yourServer',
+    user: 'yourUser',
+    password: 'yourPassword'
+  });
   try {
     await db.open();
     const result = await db.executeQuery('SELECT * FROM yourTable');
@@ -158,12 +166,18 @@ async function fetchData(dbName) {
 fetchData();
 ```
 
-3. Using Transactions:
-```javascript
-const { MSSQLConnection } = require('db.js');
+**3. Using Transactions:**
 
-async function fetchData(dbName) {
-  const db = new MSSQLConnection('yourDatabase');
+```javascript
+const { MSSQLConnection } = require('./db.js');
+
+async function fetchData() {
+  const db = new MSSQLConnection({
+    database: 'yourDatabase',
+    server: 'yourServer',
+    user: 'yourUser',
+    password: 'yourPassword'
+  });
   const theTrans = await db.startTransaction()
   try {
     await db.open();
@@ -174,7 +188,7 @@ async function fetchData(dbName) {
     console.log(result2.recordset);
     await db.commitTransaction(theTrans)
   } catch (error) {
-    await db.rollbackTransaction(trans);
+    await db.rollbackTransaction(theTrans); // Use theTrans here
     console.error('Database error:', error);
   } finally {
     await db.close();
@@ -183,12 +197,19 @@ async function fetchData(dbName) {
 
 fetchData();
 ```
-4. Paged Queries:
+
+**4. Paged Queries:**
+
 ```javascript
-const { MSSQLConnection } = require('your-module-name'); // Replace with your actual module name!
+const { MSSQLConnection } = require('./db.js'); // Replace with your actual module name!
 
 async function getPaginatedData() {
-  const db = new MSSQLConnection('yourDatabase');
+  const db = new MSSQLConnection({
+    database: 'yourDatabase',
+    server: 'yourServer',
+    user: 'yourUser',
+    password: 'yourPassword'
+  });
   try {
     await db.open();
     const page1 = await db.executeSQLCmd('SELECT * FROM yourTable ORDER BY id', [], { limit: 10, skip: 0 });
@@ -209,55 +230,78 @@ async function getPaginatedData() {
 
 getPaginatedData();
 ```
-5. Parameterized Queries
+
+**5. Parameterized Queries**
+
 ```javascript
-// Example 1: Running a simple query without parameters using executeQuery
-console.log('--- Running a simple query ---');
-const simpleQueryResult = await db.executeQuery('SELECT GETDATE() AS CurrentDateTime;');
-console.log('Query Result:', simpleQueryResult.recordset);
+const { MSSQLConnection } = require('./db.js');
 
-// Example 2: Running a query with parameters using executeQuery
-console.log('\n--- Running a parameterized query (executeQuery) ---');
-const productCode = 'ABC-123';
-const minPrice = 50;
-const parameterizedQueryResult = await db.executeQuery(
-  'SELECT * FROM Products WHERE ProductCode = @code AND Price > @price;',
-  [
-    ['code', db.TYPES.VarChar, productCode],
-    ['price', db.TYPES.Int, minPrice],
-  ]
-);
-console.log('Parameterized Query Result:', parameterizedQueryResult.recordset);
+async function runParameterizedQueries() {
+  const db = new MSSQLConnection({
+    database: 'yourDatabase',
+    server: 'yourServer',
+    user: 'yourUser',
+    password: 'yourPassword'
+  });
+  try {
+    await db.open();
 
-// Example 3: Running a query with placeholders using executeSQLCmd (array parameters)
-console.log('\n--- Running a query with placeholders (executeSQLCmd - array params) ---');
-const orderId = 101;
-const customerName = 'John Doe';
-const placeholderQueryResult1 = await db.executeSQLCmd(
-  'SELECT * FROM Orders WHERE OrderID = ? AND CustomerName = ?;',
-  [orderId, customerName]
-);
-console.log('Placeholder Query Result (array params):', placeholderQueryResult1.results);
+    // Example 1: Running a simple query without parameters using executeQuery
+    console.log('--- Running a simple query ---');
+    const simpleQueryResult = await db.executeQuery('SELECT GETDATE() AS CurrentDateTime;');
+    console.log('Query Result:', simpleQueryResult.recordset);
 
-// Example 4: Running a query with placeholders using executeSQLCmd (explicit parameter types)
-console.log('\n--- Running a query with placeholders (executeSQLCmd - typed params) ---');
-const quantity = 5;
-const lastOrderDate = new Date('2024-12-31T00:00:00Z');
-const placeholderQueryResult2 = await db.executeSQLCmd(
-  'SELECT * FROM OrderDetails WHERE Quantity > ? AND OrderDate <= ?;',
-  [
-    [quantity, db.TYPES.Int],
-    [lastOrderDate, db.TYPES.DateTime],
-  ]
-);
-console.log('Placeholder Query Result (typed params):', placeholderQueryResult2.results);
+    // Example 2: Running a query with parameters using executeQuery
+    console.log('\n--- Running a parameterized query (executeQuery) ---');
+    const productCode = 'ABC-123';
+    const minPrice = 50;
+    const parameterizedQueryResult = await db.executeQuery(
+      'SELECT * FROM Products WHERE ProductCode = @code AND Price > @price;',
+      [
+        ['code', db.TYPES.VarChar, productCode],
+        ['price', db.TYPES.Int, minPrice],
+      ]
+    );
+    console.log('Parameterized Query Result:', parameterizedQueryResult.recordset);
 
-// Example 5: Running a paged query using executeSQLCmd
-console.log('\n--- Running a paged query (executeSQLCmd) ---');
-const productsPaged = await db.executeSQLCmd(
-  'SELECT ProductID, ProductName, Price FROM Products ORDER BY ProductID;',
-  [],
-  { limit: 10, skip: 5 } // Get records 6 to 15
-);
-console.log('Paged Query Result:', productsPaged.results);
+    // Example 3: Running a query with placeholders using executeSQLCmd (array parameters)
+    console.log('\n--- Running a query with placeholders (executeSQLCmd - array params) ---');
+    const orderId = 101;
+    const customerName = 'John Doe';
+    const placeholderQueryResult1 = await db.executeSQLCmd(
+      'SELECT * FROM Orders WHERE OrderID = ? AND CustomerName = ?;',
+      [orderId, customerName]
+    );
+    console.log('Placeholder Query Result (array params):', placeholderQueryResult1.results);
+
+    // Example 4: Running a query with placeholders using executeSQLCmd (explicit parameter types)
+    console.log('\n--- Running a query with placeholders (executeSQLCmd - typed params) ---');
+    const quantity = 5;
+    const lastOrderDate = new Date('2024-12-31T00:00:00Z');
+    const placeholderQueryResult2 = await db.executeSQLCmd(
+      'SELECT * FROM OrderDetails WHERE Quantity > ? AND OrderDate <= ?;',
+      [
+        [quantity, db.TYPES.Int],
+        [lastOrderDate, db.TYPES.DateTime],
+      ]
+    );
+    console.log('Placeholder Query Result (typed params):', placeholderQueryResult2.results);
+
+    // Example 5: Running a paged query using executeSQLCmd
+    console.log('\n--- Running a paged query (executeSQLCmd) ---');
+    const productsPaged = await db.executeSQLCmd(
+      'SELECT ProductID, ProductName, Price FROM Products ORDER BY ProductID;',
+      [],
+      { limit: 10, skip: 5 } // Get records 6 to 15
+    );
+    console.log('Paged Query Result:', productsPaged.results);
+
+  } catch (error) {
+    console.error('Database error:', error);
+  } finally {
+    await db.close();
+  }
+}
+
+runParameterizedQueries();
 ```
