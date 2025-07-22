@@ -1,12 +1,12 @@
 // db.js
 const sqlConnector = require('mssql');
-const { formatDate } = require('./date_utils.js');
+const { formatDateToCustomISO } = require('./date_utils.js');
 
 class MSSQLConnection {
-  constructor(dbName, config = {}) {
-    this.baseConfig = {
+  constructor(config = {}) {
+    this.params = {
       server: config.server || '',
-      database: dbName,
+      database: config.database || '',
       user: config.user || '',
       password: config.password || '',
       pool: {
@@ -20,61 +20,71 @@ class MSSQLConnection {
         useUTC: config.options?.useUTC ?? false,
       },
     };
-    this.options = this.baseConfig.options || {};
+
     this.TYPES = sqlConnector.TYPES;
     this.dbPool = null;
-    this._dbName = dbName;
     this.transaction = null;
   }
 
-  get dbName() {
-    return this._dbName;
+  // 新增的 Builder 方法（可選用）
+  withServer(server) {
+    this.params.server = server;
+    return this;
   }
 
-  set dbName(newDbName) {
-    if (this._dbName !== newDbName) {
-      if (this.dbPool)
-        this.dbPool.close();
-      this.dbPool = null;
-      this._dbName = newDbName;
-      this.baseConfig.database = newDbName;
-    }
-  }  
-
-  get active() {
-    if (this.dbPool)
-      return this.dbPool.connected;
-    return false;
+  withDatabase(database) {
+    this.params.database = database;
+    return this;
   }
 
-  async open() {
-    if (!this.dbPool || !this.dbPool.connected) {
-      try {
-        this.dbPool = await new sqlConnector.ConnectionPool(this.baseConfig).connect();
-        console.log(`成功連線至資料庫: ${this.baseConfig.database}`);
-      } catch (err) {
-        console.error(`連線至資料庫 ${this.baseConfig.database} 失敗:`, err);
-        throw err;
+  withUser(user) {
+    this.params.user = user;
+    return this;
+  }
+
+  withPassword(password) {
+    this.params.password = password;
+    return this;
+  }
+
+  withOptions(options = {}) {
+    Object.assign(this.params.options, options);
+    return this;
+  }
+
+  withPool(poolConfig = {}) {
+    Object.assign(this.params.pool, poolConfig);
+    return this;
+  }
+
+  validate() {
+    const required = ['server', 'database', 'user', 'password'];
+    for (const key of required) {
+      if (!this.params[key]) {
+        throw new Error(`Missing required parameter: ${key}`);
       }
     }
   }
 
+  get connected() {
+    return this.dbPool?.connected || false;
+  }
 
-  async close(){
-    if (this.dbPool && this.dbPool.connected) {
-        try {
-            await this.dbPool.close();
-            this.dbPool = null;
-            console.log(`資料庫連線已關閉: ${this.baseConfig.database}`);
-        } catch (err) {
-            console.error(`關閉資料庫連線 ${this.baseConfig.database} 失敗:`, err);
-            throw err;
-        }
+  async open() {
+    this.validate();
+    this.dbPool = await new sqlConnector.ConnectionPool(this.params).connect();
+    return this;
+  }
+
+  async close() {
+    if (this.dbPool) {
+      await this.dbPool.close();
+      this.dbPool = null;
     }
   }
 
   async startTransaction() {
-    if (!this.active) {
+    if (!this.dbPool?.connected) {
       await this.open();
     }
     if (!this.transaction) {
@@ -132,10 +142,10 @@ class MSSQLConnection {
       console.warn('Provided transaction does not match current transaction, or no transaction is in progress.'); // 提供的事務與目前的事務不符，或沒有正在進行的事務。
     }
   }
-    
-  async executeQuery(query, parameters) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
-    if (!this.transaction) {
-      await this.open(); // 只有非交易時，才呼叫 open()
+  
+  async executeQuery(query, parameters) {
+    if (!this.transaction && !this.connected) {
+      await this.open();
     }
 
     try {
@@ -172,7 +182,7 @@ class MSSQLConnection {
     }
   }
 
-  async executeSQLCmd(sql, hostVariables, options = {}) { //移除dbName 參數, 使用 建構子 提供的 database 名稱
+  async executeSQLCmd(sql, hostVariables, options = {}) {
     try {
       let paramIndex = 1;
       let modifiedSql = sql.replace(/\?/g, () => `@param${paramIndex++}`);
@@ -218,26 +228,52 @@ class MSSQLConnection {
 
       const result = await this.executeQuery(modifiedSql, parameters);
 
-      result.recordset?.forEach((row) => {
-        for (const key in row) {
-          if (row[key] instanceof Date) {
-            row[key] = formatDate(row[key], this.options.useUTC);
-          }
-          if (row[key] instanceof Buffer) {
-            row[key] = row[key].toString('base64');
-          }
-        }
-      });
+      // 由 normalizeRow 取代重複內容
+      if (result && result.recordset) 
+        result.recordset = result.recordset.map(this.#normalizeRow);
+      
 
-      return {
-        results: result.recordset,
-        n: result.rowsAffected[result.rowsAffected.length - 1],
-        responseTime: result.statistics?.elapsedMilliseconds || 0,
-        warn: [],
-      };
+      // 取消自定義內容, 符合多數人使用 mssql 的習慣
+      // return {
+      //   results: result.recordset,
+      //   n: result.rowsAffected[result.rowsAffected.length - 1],
+      //   responseTime: result.statistics?.elapsedMilliseconds || 0,
+      //   warn: [],
+      // };
+      return result;
     } catch (err) {
       throw err;
     }
   }
+
+  async executeMultiResult(sql, params = {}) {
+    if (!this.connected) await this.open();
+
+    const request = this.transaction
+      ? this.transaction.request()
+      : this.dbPool.request();
+
+    for (const key in params) {
+      request.input(key, params[key]);
+    }
+
+    const result = await request.query(sql);
+
+    return Array.isArray(result.recordsets)
+      ? result.recordsets.map(rs => rs.map(this.#normalizeRow))
+      : []
+  }
+
+  #normalizeRow = (row) => {
+    for (const key in row) {
+      if (row[key] instanceof Date) {
+        row[key] = formatDateToCustomISO(row[key], this.params.options.useUTC);
+      }
+      else if (row[key] instanceof Buffer) {
+        row[key] = row[key].toString('base64');
+      }
+    }
+    return row;
+  };
 }
 module.exports = { MSSQLConnection };
