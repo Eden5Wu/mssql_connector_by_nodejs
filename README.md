@@ -41,11 +41,13 @@ MSSQL's `datetime` and `datetime2` fields usually store time zone-aware data. So
 
 **How to configure the useUTC setting is a critical decision that depends on your application's goals:**
 
-* Scenario 1: Co-existing with a Legacy System (Should be set to false)
-*    If your objective is to co-exist with a legacy system (e.g., a Win32 application) and its database that operate in a specific timezone (such as UTC+8), you should set useUTC to false. This ensures that when reading historical data, timestamps are not incorrectly offset, thus maintaining data consistency with the old system.
+  * **Scenario 1: Co-existing with a Legacy System (Should be set to false)**
+    
+    If your objective is to co-exist with a legacy system (e.g., a Win32 application) and its database that operate in a specific timezone (such as UTC+8), you should set useUTC to false. This ensures that when reading historical data, timestamps are not incorrectly offset, thus maintaining data consistency with the old system.
 
-* Scenario 2: Developing a New, Global Application (Should be set to true)
-*    If you are developing a new application intended for a global audience, the best practice is to set useUTC to true (which is also the default for the mssql package). This will handle all timestamps as Coordinated Universal Time (UTC), eliminating timezone ambiguity and providing a robust approach for handling international applications.
+  * **Scenario 2: Developing a New, Global Application (Should be set to true)**
+    
+    If you are developing a new application intended for a global audience, the best practice is to set useUTC to true (which is also the default for the mssql package). This will handle all timestamps as Coordinated Universal Time (UTC), eliminating timezone ambiguity and providing a robust approach for handling international applications.
 
 ---
 
