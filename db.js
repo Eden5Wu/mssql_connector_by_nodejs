@@ -1,5 +1,6 @@
+// db.js
 const sqlConnector = require('mssql');
-const dayjs = require("./date_utils.js");
+const { formatDate } = require('./date_utils.js');
 
 class MSSQLConnection {
   constructor(dbName, config = {}) {
@@ -19,7 +20,7 @@ class MSSQLConnection {
         useUTC: config.options?.useUTC ?? false,
       },
     };
-    this.options = config.options || {};
+    this.options = this.baseConfig.options || {};
     this.TYPES = sqlConnector.TYPES;
     this.dbPool = null;
     this._dbName = dbName;
@@ -220,12 +221,7 @@ class MSSQLConnection {
       result.recordset?.forEach((row) => {
         for (const key in row) {
           if (row[key] instanceof Date) {
-            //row[key] = formatISOWithTimezone(row[key]);
-            //row[key] = dayjs(row[key]).format();
-            if (this.options?.useUTC)
-              row[key] = dayjs(row[key]).formatISOWithTimezoneFromUTC();
-            else
-              row[key] = dayjs(row[key]).formatISOWithTimezone();
+            row[key] = formatDate(row[key], this.options.useUTC);
           }
           if (row[key] instanceof Buffer) {
             row[key] = row[key].toString('base64');
