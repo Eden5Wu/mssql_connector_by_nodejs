@@ -147,31 +147,30 @@ class MSSQLConnection {
     if (!this.transaction && !this.connected) {
       await this.open();
     }
-
+  
     try {
       const request = this.transaction
         ? new sqlConnector.Request(this.transaction)
         : this.dbPool.request();
-
+  
       if (parameters) {
         for (const [name, type, value] of parameters) {
           request.input(name, type, value);
         }
       }
-
+  
       const result = await request.query(query);
-
-      if (result && result.recordset) {
-        result.recordset.forEach((row) => {
-          for (const key in row) {
-            if (typeof row[key] === 'string') {
-              row[key] = row[key].trimEnd();
-            }
-          }
-        });
+  
+      // 主要修改：直接對 result.recordsets 進行正規化
+      if (Array.isArray(result.recordsets)) {
+        result.recordsets = result.recordsets.map(rs => rs.map(this.#normalizeRow));
+      } else {
+        // 如果沒有 recordsets (例如執行 INSERT/UPDATE 等無回傳的語句)，則確保為空陣列
+        result.recordsets = [];
+        result.recordset = []; // 這裡仍然需要確保 result.recordset 在沒有 recordsets 時為空陣列
       }
-
-      return result;
+  
+      return result; // 回傳包含正規化後 recordsets 的完整結果物件
     } catch (err) {
       console.error('SQL Error', {
         query,
@@ -253,9 +252,10 @@ class MSSQLConnection {
     for (const key in row) {
       if (row[key] instanceof Date) {
         row[key] = formatDateToCustomISO(row[key], this.params.options.useUTC);
-      }
-      else if (row[key] instanceof Buffer) {
+      } else if (row[key] instanceof Buffer) {
         row[key] = row[key].toString('base64');
+      } else if (typeof row[key] === 'string') { // 將 trimEnd() 邏輯整合進來
+        row[key] = row[key].trimEnd();
       }
     }
     return row;
