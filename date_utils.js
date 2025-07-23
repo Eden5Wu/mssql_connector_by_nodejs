@@ -13,34 +13,38 @@ function formatDateToCustomISO(date, useUTC = false) {
   }
 
   // 內部輔助函式，根據 useUTC 決定要呼叫哪個 Date 方法 (本地 vs UTC)
-  const get = (fnUTC, fnLocal) => (useUTC ? fnUTC.call(date) : fnLocal.call(date));
+  const get = (utcGetter, localGetter) => (useUTC ? utcGetter() : localGetter());
 
   // 取得所有日期和時間的組成部分
-  const year = get(date.getUTCFullYear, date.getFullYear);
-  const month = String(get(date.getUTCMonth, date.getMonth) + 1).padStart(2, '0');
-  const day = String(get(date.getUTCDate, date.getDate)).padStart(2, '0');
-  const hours = get(date.getUTCHours, date.getHours);
-  const minutes = get(date.getUTCMinutes, date.getMinutes);
-  const seconds = get(date.getUTCSeconds, date.getSeconds);
-  const milliseconds = get(date.getUTCMilliseconds, date.getMilliseconds);
+  const year = get(() => date.getUTCFullYear(), () => date.getFullYear());
+  const month = String(get(() => date.getUTCMonth(), () => date.getMonth()) + 1).padStart(2, '0');
+  const day = String(get(() => date.getUTCDate(), () => date.getDate())).padStart(2, '0');
+  const hours = get(() => date.getUTCHours(), () => date.getHours());
+  const minutes = get(() => date.getUTCMinutes(), () => date.getMinutes());
+  const seconds = get(() => date.getUTCSeconds(), () => date.getSeconds());
+  const milliseconds = get(() => date.getUTCMilliseconds(), () => date.getMilliseconds());
 
-  // 您的需求 1: 如果是整點時間 (00:00:00.000)，則只回傳日期
+  // 如果是整點 (00:00:00.000)，直接回傳年月日
   if (hours === 0 && minutes === 0 && seconds === 0 && milliseconds === 0) {
     return `${year}-${month}-${day}`;
   }
 
-  // 您的需求 2: 格式化其他時間
+  // 組合時間字串
   const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
 
   // 計算時區偏移字串
   // getTimezoneOffset() 的符號與常見表示法相反 (UTC+8 會回傳 -480)
-  const offsetTotalMinutes = -date.getTimezoneOffset();
-  const offsetSign = offsetTotalMinutes >= 0 ? '+' : '-';
-  const offsetHours = String(Math.floor(Math.abs(offsetTotalMinutes) / 60)).padStart(2, '0');
-  const offsetMins = String(Math.abs(offsetTotalMinutes % 60)).padStart(2, '0');
-  
   // 如果 useUTC 為 true，時區固定為 +00:00；否則使用本地時區
-  const offsetStr = useUTC ? '+00:00' : `${offsetSign}${offsetHours}:${offsetMins}`;
+  const offsetStr = useUTC
+    ? '+00:00'
+    : (() => {
+        const offsetTotalMinutes = -date.getTimezoneOffset();
+        const sign = offsetTotalMinutes >= 0 ? '+' : '-';
+        const h = String(Math.floor(Math.abs(offsetTotalMinutes) / 60)).padStart(2, '0');
+        const m = String(Math.abs(offsetTotalMinutes % 60)).padStart(2, '0');
+        return `${sign}${h}:${m}`;
+      })();
+
 
   return `${year}-${month}-${day}T${timeStr}${offsetStr}`;
 }
