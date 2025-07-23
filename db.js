@@ -59,6 +59,21 @@ class MSSQLConnection {
     return this;
   }
 
+  withConnectionTimeout(timeout) {
+    this.params.connectionTimeout = timeout;
+    return this;
+  }
+
+  withRequestTimeout(timeout) {
+    this.params.requestTimeout = timeout;
+    return this;
+  }
+
+  withUseUTC(useUTC) {
+    this.params.options.useUTC = useUTC;
+    return this;
+  }
+
   validate() {
     const required = ['server', 'database', 'user', 'password'];
     for (const key of required) {
