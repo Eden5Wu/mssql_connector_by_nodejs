@@ -9,6 +9,8 @@ class MSSQLConnection {
       database: config.database || '',
       user: config.user || '',
       password: config.password || '',
+      connectionTimeout: config.connectionTimeout ?? 15000,
+      requestTimeout: config.requestTimeout ?? 15000,
       pool: {
         max: config.pool?.max || 10,
         min: config.pool?.min || 0,
@@ -71,9 +73,11 @@ class MSSQLConnection {
   }
 
   async open() {
-    this.validate();
-    this.dbPool = await new sqlConnector.ConnectionPool(this.params).connect();
-    return this;
+    if (!this.transaction && !this.connected) {
+      this.validate();
+      console.debug('Opening new DB connection...');
+      this.dbPool = await new sqlConnector.ConnectionPool(this.params).connect();
+    }
   }
 
   async close() {
