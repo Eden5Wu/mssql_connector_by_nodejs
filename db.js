@@ -88,6 +88,10 @@ class MSSQLConnection {
   }
 
   async startTransaction() {
+    if (this.transaction) {
+      // 如果有，就拋出錯誤，阻止開啟新交易
+      throw new Error('Transaction already in progress. This connector supports only one active transaction at a time.');
+    }
     if (!this.dbPool?.connected) {
       await this.open();
     }
