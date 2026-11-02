@@ -1,0 +1,31 @@
+{
+  "name": "mssql_connector_by_nodejs",
+  "version": "1.0.0",
+  "description": "A lightweight Microsoft SQL Server connector for Node.js with connection pooling, transactions, parameterized queries, and result formatting.",
+  "main": "db.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node -e \"require('./db.js'); console.log('Module loaded successfully')\""
+  },
+  "keywords": [
+    "mssql",
+    "sql-server",
+    "nodejs",
+    "database",
+    "connection-pool",
+    "transactions"
+  ],
+  "author": "Eden Wu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eden5Wu/mssql_connector_by_nodejs.git"
+  },
+  "homepage": "https://github.com/Eden5Wu/mssql_connector_by_nodejs#readme",
+  "bugs": {
+    "url": "https://github.com/Eden5Wu/mssql_connector_by_nodejs/issues"
+  },
+  "dependencies": {
+    "mssql": "^11.0.0"
+  }
+}
